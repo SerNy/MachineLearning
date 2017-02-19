@@ -1,0 +1,115 @@
+---
+title: "Machine Learning - Project"
+author: "Ammar Alchami"
+date: "February 17, 2017"
+output: html_document
+---
+
+#Environment Preparation
+```{r setup, echo=TRUE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(lattice)
+library(rattle)
+library(ggplot2)
+library(randomForest)
+library(RColorBrewer)
+library(knitr)
+```
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit, it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+### Project Goal
+
+The goal of this project is to predict the manner in which the participants did the exercise. In other words, we need to predict the different fashions of the Unilateral Dumbbell Biceps crul performed by the participants. It is the classe varaible in the dataset, and we can use any of the other variables to predict with.
+
+
+## Data Loading
+
+Reading and Cleaning the data
+```{r loading, echo=TRUE}
+#Set the URL for downloading the datasets
+trainURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+# Download the datasets setting NA variables and #DIV/0!
+training <- read.csv(url(trainURL), na.strings=c("NA","","#DIV/0!"))
+testing  <- read.csv(url(testURL), na.strings=c("NA","","#DIV/0!"))
+
+# Delete  predictors (columns) of the training set that contain missing values
+training <- training[, colSums(is.na(training)) == 0]
+testing <- testing[, colSums(is.na(testing)) == 0]
+
+# the forst 7 predictors have little prediction over the outcome
+training <- training[, -c(1:7)]
+testing <- testing[, -c(1:7)]
+
+# Create partition with the training dataset
+inTrain <- createDataPartition(y=training$classe, p=0.70, list=FALSE)
+trainSet <- training[inTrain, ]
+validSet <- training[-inTrain, ]
+dim(trainSet)
+dim(validSet)
+```
+
+## Prediction With Decision Trees
+
+```{r DT, echo=TRUE}
+#set.seed(12345)
+modDecisionTree <- rpart(classe ~ ., data=trainSet, method="class")
+fancyRpartPlot(modDecisionTree)
+```
+
+# Predicting The Outcomes Using The Test Set
+```{r DTPredict, echo=TRUE}
+predictDecisionTree <- predict(modDecisionTree, validSet, type = "class")
+confusionDecisionTree <- confusionMatrix(predictDecisionTree, validSet$classe)
+confusionDecisionTree
+```
+
+```{r DTPlot, echo=TRUE}
+plot(confusionDecisionTree$table, col = confusionDecisionTree$byClass, main = paste("Decision Tree Confusion Matrix: Accuracy =", round(confusionDecisionTree$overall['Accuracy'], 4)))
+```
+
+## Prediction with Random Forests
+```{r RF, echo=TRUE}
+set.seed(12345)
+trainSet$classe = factor(trainSet$classe)
+modFitRandom <- randomForest(classe~. , data=trainSet)#, method = "rf", na.action = na.exclude)
+predictionRandom <- predict(modFitRandom, validSet, type = "class")
+cnf <- confusionMatrix(predictionRandom, validSet$classe)
+cnf
+```
+
+```{r RFPlot, echo=TRUE}
+plot(cnf$table, col = cnf$byClass, main = paste("Random Forest Confusion Matrix: Accuracy =", round(cnf$overall['Accuracy'], 4)))
+```
+
+
+
+## Predicition with Generalized Boosted Model
+
+```{r GBM, echo=TRUE}
+set.seed(12345)
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modFitGBM  <- train(classe ~ ., data=trainSet, method = "gbm", trControl = controlGBM, verbose = FALSE, na.action=na.exclude)
+modFitGBM$finalModel
+```
+
+```{r GBPPredict, echo=TRUE}
+predictGBM <- predict(modFitGBM, newdata=validSet, na.action = na.pass)
+confMatGBM <- confusionMatrix(predictGBM, validSet$classe)
+confMatGBM
+```
+
+#Results
+Random Forests gave an Accuracy in the validSet dataset of 99.95%, which was more accurate that that of the Decision Trees or GBM. The expected out-of-sample error is 100-99.95 = 0.05%.
+
+# Predicting Results on the Test Data
+```{r TestData, echo=TRUE}
+predictionRandom <- predict(modFitRandom, testing, type = "class")
+predictionRandom
+```
